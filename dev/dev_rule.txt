@@ -1,0 +1,17 @@
+采用三层分支模型：
+
+1. main：稳定发布分支，只用于版本发布，不允许直接开发。
+2. dev：团队集成开发分支，所有功能合入从这里进行。
+3. 个人分支（如 ljj_dev、qzy_dev）：用于个人日常开发。
+
+开发流程：
+1. 每次开发前，从 dev 同步代码到个人分支：
+   git checkout dev && git pull origin dev  
+   git checkout lxx_dev && git merge dev  
+
+2. 在个人分支完成开发并 push：
+   git push origin lxx_dev
+
+3. 提 PR：个人分支 -> dev，代码评审通过后合并。
+
+4. 发版流程：dev 合并到 main，然后打 tag 发布版本。
