@@ -23,4 +23,13 @@
 
 远程仓库配置：
 - origin: 内部仓库（git@github.com:InfiXAI/infi-evalscope.git）
-- upstream: 上游官方仓库（需要配置：git remote add upstream https://github.com/modelscope/evalscope.git）
+- upstream: 上游官方仓库（已配置：git remote add upstream https://github.com/modelscope/evalscope.git）
+
+初始化分支结构：
+运行脚本初始化分支结构：
+  ./dev/setup_branches.sh
+
+或者手动创建 internal-main 分支：
+  git checkout main
+  git checkout -b internal-main
+  git push -u origin internal-main
