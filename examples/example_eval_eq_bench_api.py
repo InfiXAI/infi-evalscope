@@ -10,7 +10,16 @@
     pip install evalscope
 
 使用方法：
+    # 设置环境变量（推荐，避免 API Key 暴露在代码中）
+    export SILICONFLOW_API_KEY='your-api-key-here'
     python examples/example_eval_eq_bench_api.py
+    
+    # 或者直接在命令行设置
+    SILICONFLOW_API_KEY='your-api-key-here' python examples/example_eval_eq_bench_api.py
+    
+注意：
+    - API Key 已从代码中移除，必须通过环境变量 SILICONFLOW_API_KEY 提供
+    - 这样可以避免敏感信息泄露到代码仓库中
 """
 
 import os
@@ -37,7 +46,7 @@ def eval_eq_bench_with_api():
 
         # API 配置
         api_url='https://api.siliconflow.cn/v1',  # SiliconFlow API 基础 URL
-        api_key='sk-xcurhftgmquyitgvmlkamrezhlpzewlqdxclypubpexwsdkl',  # SiliconFlow API Key
+        api_key=os.getenv('SILICONFLOW_API_KEY', ''),  # 从环境变量获取 API Key，避免暴露在代码中
 
         # 数据集配置
         datasets=['eq_bench'],
@@ -94,7 +103,7 @@ def eval_eq_bench_with_dict():
 
         # API 配置
         'api_url': 'https://api.siliconflow.cn/v1',  # SiliconFlow API URL
-        'api_key': 'sk-xcurhftgmquyitgvmlkamrezhlpzewlqdxclypubpexwsdkl',  # SiliconFlow API Key
+        'api_key': os.getenv('SILICONFLOW_API_KEY', ''),  # 从环境变量获取 API Key
 
         # 数据集配置
         'datasets': ['eq_bench'],
@@ -157,7 +166,7 @@ def eval_eq_bench_full():
 
         # API 配置
         api_url='https://api.siliconflow.cn/v1',  # SiliconFlow API URL
-        api_key='sk-xcurhftgmquyitgvmlkamrezhlpzewlqdxclypubpexwsdkl',  # SiliconFlow API Key
+        api_key=os.getenv('SILICONFLOW_API_KEY', ''),  # 从环境变量获取 API Key
 
         # 数据集配置
         datasets=['eq_bench'],
