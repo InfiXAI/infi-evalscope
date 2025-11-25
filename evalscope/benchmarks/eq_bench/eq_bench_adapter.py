@@ -14,6 +14,9 @@ from evalscope.api.registry import register_benchmark
 from evalscope.constants import Tags
 from evalscope.utils.logger import get_logger
 
+# Import official EQ-Bench v2 scoring functions
+from .scoring import calculate_score_fullscale, parse_answers, validate_answer_format
+
 logger = get_logger()
 
 PROMPT_TEMPLATE = """{question}"""
@@ -23,7 +26,7 @@ PROMPT_TEMPLATE = """{question}"""
     BenchmarkMeta(
         name='eq_bench',
         pretty_name='EQ-Bench',
-        tags=[Tags.REASONING, Tags.QA],
+        tags=[Tags.INSTRUCTION_FOLLOWING],
         description=
         'EQ-Bench is a benchmark for evaluating language models on emotional intelligence tasks. '
         'It assesses the ability to predict the likely emotional responses of characters in dialogues '
@@ -31,7 +34,7 @@ PROMPT_TEMPLATE = """{question}"""
         '[Paper](https://arxiv.org/abs/2312.06281) | [Homepage](https://eqbench.com/)',
         dataset_id='datasets/EQ-bench',  # Local dataset path
         subset_list=['main'],
-        metric_list=['correlation', 'mae'],  # Mean Absolute Error and Correlation
+        metric_list=['eq_bench_score'],  # Official v2 full-scale scoring
         few_shot_num=0,
         train_split=None,
         eval_split='validation',  # Will look for main_validation.csv or validation.csv
@@ -138,120 +141,92 @@ class EQBenchAdapter(DefaultDataAdapter):
         self, original_prediction: str, filtered_prediction: str, reference: str, task_state: TaskState
     ) -> Score:
         """
-        Calculate evaluation scores by comparing prediction with reference.
-        
-        EQ-Bench evaluates based on correlation and mean absolute error between
-        predicted emotion scores and reference scores.
+        Calculate evaluation scores using official EQ-Bench v2 scoring algorithm.
+
+        Uses sigmoid scaling for small differences (≤5) and linear scaling for large differences (>5),
+        with an adjustment constant (0.7477) that makes random answers score 0.
+
+        Returns a score in range 0-100 (internally 0-10 scaled by 10).
         """
-        import numpy as np
-        
         score = Score(
             extracted_prediction=filtered_prediction,
             prediction=original_prediction,
         )
-        
+
         try:
-            # Get reference answer from metadata
+            # Get reference answer from metadata - prefer fullscale (v2) over standard (v1)
             ref_answer = task_state.metadata.get('reference_answer', {})
-            
-            # Try to parse the prediction
-            # Model output format is typically: "EmotionName: score\nEmotionName: score..."
-            import re
-            pred_dict = {}
-            
-            try:
-                if isinstance(filtered_prediction, str):
-                    # Try JSON/dict format first
-                    if filtered_prediction.strip().startswith('{'):
-                        try:
-                            pred_dict = json.loads(filtered_prediction)
-                        except json.JSONDecodeError:
-                            pred_dict = ast.literal_eval(filtered_prediction)
-                    else:
-                        # Parse format like "EmotionName: score" or "EmotionName: score\n..."
-                        # Extract emotion names and scores from the text
-                        lines = filtered_prediction.strip().split('\n')
-                        for line in lines:
-                            line = line.strip()
-                            if ':' in line:
-                                # Match pattern like "EmotionName: score" or "EmotionName: score  "
-                                match = re.match(r'^([^:]+):\s*(\d+)', line, re.IGNORECASE)
-                                if match:
-                                    emotion_name = match.group(1).strip()
-                                    emotion_score = int(match.group(2))
-                                    pred_dict[emotion_name] = emotion_score
-                else:
-                    pred_dict = filtered_prediction
-            except (json.JSONDecodeError, ValueError, SyntaxError) as e:
-                logger.warning(f'Failed to parse prediction: {e}')
-                pred_dict = {}
-            
-            # Extract emotion scores for comparison
-            # Reference format: {'emotion1': 'Remorseful', 'emotion1_score': 2, ...}
-            # Need to map emotion names to scores
-            ref_scores = []
-            pred_scores = []
-            
-            for i in range(1, 5):
-                emotion_name_key = f'emotion{i}'
-                emotion_score_key = f'emotion{i}_score'
-                
-                if emotion_score_key in ref_answer:
-                    ref_score = ref_answer[emotion_score_key]
-                    # Convert to int if it's a string
-                    if isinstance(ref_score, str):
-                        ref_score = int(ref_score)
-                    ref_scores.append(ref_score)
-                    
-                    # Get emotion name from reference
-                    emotion_name = ref_answer.get(emotion_name_key, '').strip()
-                    
-                    # Try to find corresponding prediction score
-                    # First try direct key match (emotion1_score)
-                    pred_score = pred_dict.get(emotion_score_key)
-                    if pred_score is None:
-                        # Try emotion name match (case-insensitive)
-                        for key, value in pred_dict.items():
-                            if isinstance(key, str) and key.lower() == emotion_name.lower():
-                                pred_score = value
-                                break
-                    
-                    # If still not found, default to 0
-                    if pred_score is None:
-                        pred_score = 0
-                    
-                    # Convert to int if needed
-                    if isinstance(pred_score, str):
-                        pred_score = int(pred_score)
-                    
-                    pred_scores.append(pred_score)
-            
-            if len(ref_scores) > 0 and len(pred_scores) > 0:
-                # Calculate Mean Absolute Error
-                mae = np.mean(np.abs(np.array(ref_scores) - np.array(pred_scores)))
-                
-                # Calculate Pearson correlation
-                if len(ref_scores) > 1:
-                    correlation = np.corrcoef(ref_scores, pred_scores)[0, 1]
-                    if np.isnan(correlation):
-                        correlation = 0.0
-                else:
-                    correlation = 1.0 if ref_scores[0] == pred_scores[0] else 0.0
-                
-                score.value = {
-                    'mae': float(mae),
-                    'correlation': float(correlation),
-                }
-                score.main_score_name = 'correlation'
-                score.explanation = f'MAE: {mae:.3f}, Correlation: {correlation:.3f}'
-            else:
-                score.value = {'mae': float('inf'), 'correlation': 0.0}
-                score.explanation = 'Failed to extract emotion scores from prediction'
-                
+            ref_fullscale = task_state.metadata.get('reference_answer_fullscale', {})
+            # Use fullscale if available (recommended v2 scoring), otherwise fall back to v1
+            reference_to_use = ref_fullscale if ref_fullscale else ref_answer
+
+            if not reference_to_use:
+                logger.warning('No reference answer found in metadata')
+                score.value = {'eq_bench_score': 0.0}
+                score.main_score_name = 'eq_bench_score'
+                score.explanation = 'No reference answer available'
+                return score
+
+            # Parse the prediction using official parser
+            # This extracts {emotion_name: score} format from the model output
+            first_pass_answers, _ = parse_answers(filtered_prediction, revise=False)
+
+            if not first_pass_answers:
+                logger.warning('Failed to parse any emotion scores from prediction')
+                score.value = {'eq_bench_score': 0.0}
+                score.main_score_name = 'eq_bench_score'
+                score.explanation = 'Failed to parse prediction'
+                return score
+
+            # Get reference emotion names for validation
+            reference_emotions = [
+                reference_to_use.get(f'emotion{i}', '')
+                for i in range(1, 5)
+            ]
+
+            # Validate answer format using official validator
+            is_valid, error_msg = validate_answer_format(first_pass_answers, reference_emotions)
+
+            if not is_valid:
+                logger.warning(f'Invalid answer format: {error_msg}')
+                logger.debug(f'Parsed answers: {first_pass_answers}')
+                logger.debug(f'Expected emotions: {reference_emotions}')
+                score.value = {'eq_bench_score': 0.0}
+                score.main_score_name = 'eq_bench_score'
+                score.explanation = f'Invalid format: {error_msg}'
+                return score
+
+            # Calculate score using official v2 full-scale scoring algorithm
+            eq_score = calculate_score_fullscale(reference_to_use, first_pass_answers)
+
+            if eq_score is None:
+                logger.warning('calculate_score_fullscale returned None')
+                score.value = {'eq_bench_score': 0.0}
+                score.main_score_name = 'eq_bench_score'
+                score.explanation = 'Scoring failed'
+                return score
+
+            # Scale from 0-10 to 0-100 for reporting
+            normalized_score = eq_score * 10.0
+
+            # Clamp to valid range [0, 100]
+            normalized_score = max(0.0, min(100.0, normalized_score))
+
+            score.value = {'eq_bench_score': normalized_score}
+            score.main_score_name = 'eq_bench_score'
+            score.explanation = f'EQ-Bench Score: {normalized_score:.2f}/100 (raw: {eq_score:.3f}/10)'
+
+            logger.debug(f'Prediction: {first_pass_answers}')
+            logger.debug(f'Reference: {reference_emotions}')
+            logger.debug(f'Score: {normalized_score:.2f}')
+
         except Exception as e:
-            logger.error(f'Error calculating EQ-Bench metrics: {e}')
-            score.value = {'mae': float('inf'), 'correlation': 0.0}
+            logger.error(f'Error calculating EQ-Bench score: {e}')
+            import traceback
+            logger.debug(traceback.format_exc())
+            score.value = {'eq_bench_score': 0.0}
+            score.main_score_name = 'eq_bench_score'
             score.explanation = f'Evaluation error: {str(e)}'
-        
+
         return score
 
