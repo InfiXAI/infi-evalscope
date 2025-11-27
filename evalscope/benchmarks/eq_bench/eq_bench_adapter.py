@@ -2,7 +2,9 @@
 
 import ast
 import json
+import sys
 from functools import partial
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from evalscope.api.benchmark import BenchmarkMeta, DefaultDataAdapter
@@ -14,8 +16,12 @@ from evalscope.api.registry import register_benchmark
 from evalscope.constants import Tags
 from evalscope.utils.logger import get_logger
 
-# Import official EQ-Bench v2 scoring functions
-from .scoring import calculate_score_fullscale, parse_answers, validate_answer_format
+# Import official EQ-Bench evaluation functions from reference implementation
+# This ensures 100% consistency with official EQ-Bench scoring algorithm
+REFERENCE_PATH = Path(__file__).parent.parent.parent.parent / 'reference' / 'EQ-bench'
+sys.path.insert(0, str(REFERENCE_PATH))
+
+from answer_validation import calculate_score_fullscale, parse_answers, validate_answer_format
 
 logger = get_logger()
 
@@ -169,7 +175,7 @@ class EQBenchAdapter(DefaultDataAdapter):
 
             # Parse the prediction using official parser
             # This extracts {emotion_name: score} format from the model output
-            first_pass_answers, _ = parse_answers(filtered_prediction, revise=False)
+            first_pass_answers, _ = parse_answers(filtered_prediction, REVISE=False)
 
             if not first_pass_answers:
                 logger.warning('Failed to parse any emotion scores from prediction')

@@ -15,7 +15,7 @@
        export LLM_BASE_URL='https://proxy.infix-ai.xyz/v1'
        export LLM_MODEL='openai/gpt-4o-mini'
        export LLM_TEMPERATURE='0'
-       export LLM_MAX_TOKENS='256'
+       export LLM_MAX_TOKENS='60'  # EQ-Bench 官方建议: REVISE=False 时使用 60
     
     2. 配置文件（可选）：
        examples/api_test/llm_config.yaml
@@ -57,9 +57,9 @@ def load_llm_config():
     # 优先从环境变量读取
     base_url = os.getenv('LLM_BASE_URL', 'https://proxy.infix-ai.xyz/v1')
     api_key = os.getenv('LLM_API_KEY') or os.getenv('DEEPSEEK_API_KEY', '')
-    model = os.getenv('LLM_MODEL', 'openai/gpt-4o-mini')
+    model = os.getenv('LLM_MODEL', 'openai/gpt-4o')
     temperature = float(os.getenv('LLM_TEMPERATURE', '0'))
-    max_tokens = int(os.getenv('LLM_MAX_TOKENS', '0')) or 256
+    max_tokens = int(os.getenv('LLM_MAX_TOKENS', '0')) or 60  # EQ-Bench 官方建议: REVISE=False 时使用 60
     
     # 如果环境变量未设置，尝试从配置文件读取（可选）
     config_file = PROJECT_ROOT / 'examples' / 'api_test' / 'llm_config.yaml'
@@ -141,7 +141,7 @@ def eval_eq_bench_with_api():
 
         # 生成配置（从配置文件读取，针对 EQ-Bench 优化）
         generation_config={
-            'max_tokens': llm_config.get('max_tokens', 0) or 256,  # 从配置文件读取，默认 256
+            'max_tokens': llm_config.get('max_tokens', 0) or 60,  # EQ-Bench 官方建议: REVISE=False 时使用 60
             'temperature': llm_config.get('temperature', 0.01),  # ⚠️ EQ-Bench 必须使用低温度
             'timeout': 120,  # 设置超时时间（秒），避免请求卡住
         },
@@ -201,7 +201,7 @@ def eval_eq_bench_with_dict():
 
         # 生成配置（从配置文件读取）
         'generation_config': {
-            'max_tokens': llm_config.get('max_tokens', 0) or 256,
+            'max_tokens': llm_config.get('max_tokens', 0) or 60,  # EQ-Bench 官方建议: REVISE=False 时使用 60
             'temperature': llm_config.get('temperature', 0.01),  # ⚠️ EQ-Bench 必须使用低温度
         },
 
@@ -264,7 +264,7 @@ def eval_eq_bench_full():
 
         # 生成配置（从配置文件读取）
         generation_config={
-            'max_tokens': llm_config.get('max_tokens', 0) or 256,
+            'max_tokens': llm_config.get('max_tokens', 0) or 60,  # EQ-Bench 官方建议: REVISE=False 时使用 60
             'temperature': llm_config.get('temperature', 0.01),  # ⚠️ EQ-Bench 必须使用低温度
         },
 
