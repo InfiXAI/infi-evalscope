@@ -159,3 +159,4 @@ logs
 CLAUDE.md
 reference/
 examples/api_test
+*.h5
