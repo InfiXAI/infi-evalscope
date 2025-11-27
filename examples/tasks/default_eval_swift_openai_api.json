@@ -5,8 +5,33 @@
       "mmlu",
       "ceval",
       "ARC_c",
-      "gsm8k"
+      "gsm8k",
+      "ace_bench"
     ],
+    "dataset_args": {
+      "ace_bench": {
+        "local_path": "new_data/ACEBench/data_all/general_fc_en",
+        "subset_list": [
+          "data_agent_multi_step",
+          "data_agent_multi_turn",
+          "data_normal_atom_bool",
+          "data_normal_atom_enum",
+          "data_normal_atom_list",
+          "data_normal_atom_number",
+          "data_normal_atom_object_deep",
+          "data_normal_atom_object_short",
+          "data_normal_multi_turn_user_adjust",
+          "data_normal_multi_turn_user_switch",
+          "data_normal_preference",
+          "data_normal_similar_api",
+          "data_normal_single_turn_parallel_function",
+          "data_normal_single_turn_single_function",
+          "data_special_error_param",
+          "data_special_incomplete",
+          "data_special_irrelevant"
+        ]
+      }
+    },
     "models": [
       {
         "path": "qwen2-0_5b-instruct",

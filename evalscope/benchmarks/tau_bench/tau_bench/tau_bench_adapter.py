@@ -44,7 +44,7 @@ logger = get_logger()
             'api_base': {
                 'type': 'str',
                 'description': 'Base URL for the user model API requests.',
-                'value': 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+                'value': 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
             },
             'generation_config': {
                 'type': 'dict',
@@ -71,7 +71,7 @@ class TauBenchAdapter(AgentAdapter):
         # setup user model args
         self.user_model = self.extra_params.get('user_model', 'qwen-plus')
         self.api_key = self.extra_params.get('api_key', 'EMPTY')
-        self.api_base = self.extra_params.get('api_base', 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+        self.api_base = self.extra_params.get('api_base', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1')
         self.generation_config = self.extra_params.get('generation_config', {'temperature': 0.0, 'max_tokens': 4096})
 
     @run_once

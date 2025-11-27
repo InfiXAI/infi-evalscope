@@ -74,6 +74,7 @@ class GeneralFCAdapter(AgentAdapter):
         except Exception as e:
             logger.error(f'Error during model inference: {e}')
             return ModelOutput.from_content(
+                model=model.name,
                 content='',
                 stop_reason='stop',
                 error=str(e),
