@@ -2,27 +2,43 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 """
-使用 SiliconFlow API 评测 EQ-Bench 示例
+使用配置文件 API 评测 EQ-Bench 示例
 
-这个脚本展示如何使用 SiliconFlow API 来评测 EQ-Bench。
+这个脚本展示如何从 llm_config.yaml 配置文件读取 API 配置来评测 EQ-Bench。
 
 环境要求：
-    pip install evalscope
+    pip install evalscope pyyaml
 
+配置方式（按优先级）：
+    1. 环境变量（推荐）：
+       export LLM_API_KEY='your-api-key'
+       export LLM_BASE_URL='https://proxy.infix-ai.xyz/v1'
+       export LLM_MODEL='openai/gpt-4o-mini'
+       export LLM_TEMPERATURE='0'
+       export LLM_MAX_TOKENS='256'
+    
+    2. 配置文件（可选）：
+       examples/api_test/llm_config.yaml
+    
 使用方法：
-    # 设置环境变量（推荐，避免 API Key 暴露在代码中）
-    export SILICONFLOW_API_KEY='your-api-key-here'
+    # 方式 1: 使用环境变量（推荐）
+    export LLM_API_KEY='your-api-key'
     python examples/example_eval_eq_bench_api.py
     
-    # 或者直接在命令行设置
-    SILICONFLOW_API_KEY='your-api-key-here' python examples/example_eval_eq_bench_api.py
+    # 方式 2: 使用配置文件
+    # 确保 examples/api_test/llm_config.yaml 存在
+    python examples/example_eval_eq_bench_api.py
     
-注意：
-    - API Key 已从代码中移除，必须通过环境变量 SILICONFLOW_API_KEY 提供
-    - 这样可以避免敏感信息泄露到代码仓库中
+配置说明：
+    - 优先从环境变量读取配置
+    - 如果环境变量未设置，会尝试从配置文件读取
+    - API Key 必须设置（环境变量或配置文件）
+    - 默认模型: openai/gpt-4o-mini
+    - 默认 Base URL: https://proxy.infix-ai.xyz/v1
 """
 
 import os
+import yaml
 from pathlib import Path
 from evalscope import run_task, TaskConfig
 
@@ -31,22 +47,83 @@ PROJECT_ROOT = Path(__file__).parent.parent
 DATASET_PATH = PROJECT_ROOT / 'datasets' / 'EQ-bench'
 
 
+def load_llm_config():
+    """
+    加载 LLM 配置
+    
+    优先从环境变量读取，如果没有则使用默认配置。
+    也可以从配置文件读取（如果存在）。
+    """
+    # 优先从环境变量读取
+    base_url = os.getenv('LLM_BASE_URL', 'https://proxy.infix-ai.xyz/v1')
+    api_key = os.getenv('LLM_API_KEY') or os.getenv('DEEPSEEK_API_KEY', '')
+    model = os.getenv('LLM_MODEL', 'openai/gpt-4o-mini')
+    temperature = float(os.getenv('LLM_TEMPERATURE', '0'))
+    max_tokens = int(os.getenv('LLM_MAX_TOKENS', '0')) or 256
+    
+    # 如果环境变量未设置，尝试从配置文件读取（可选）
+    config_file = PROJECT_ROOT / 'examples' / 'api_test' / 'llm_config.yaml'
+    if not api_key and config_file.exists():
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                file_config = yaml.safe_load(f)
+                base_url = file_config.get('base_url', base_url)
+                api_key = file_config.get('api_key', '') or api_key
+                models = file_config.get('models', [model])
+                model = models[0] if models else model
+                temperature = file_config.get('temperature', temperature)
+                max_tokens = file_config.get('max_tokens', 0) or max_tokens
+        except Exception as e:
+            print(f"警告: 无法读取配置文件 {config_file}: {e}")
+    
+    if not api_key:
+        raise ValueError(
+            "API Key 未设置！请通过以下方式之一设置：\n"
+            "1. 环境变量: export LLM_API_KEY='your-api-key'\n"
+            "2. 环境变量: export DEEPSEEK_API_KEY='your-api-key'\n"
+            "3. 配置文件: examples/api_test/llm_config.yaml"
+        )
+    
+    return {
+        'base_url': base_url,
+        'api_key': api_key,
+        'models': [model],
+        'temperature': temperature,
+        'max_tokens': max_tokens,
+    }
+
+
 def eval_eq_bench_with_api():
-    """使用 SiliconFlow API 服务评测 EQ-Bench"""
+    """使用配置文件中的 API 服务评测 EQ-Bench"""
 
     print("=" * 60)
-    print("使用 SiliconFlow API 评测 EQ-Bench")
+    print("使用配置文件 API 评测 EQ-Bench")
     print("=" * 60)
+
+    # 从配置文件加载配置
+    llm_config = load_llm_config()
+    
+    # 获取模型名称（优先使用配置文件中的第一个模型）
+    model_name = llm_config.get('models', ['openai/gpt-4o-mini'])[0]
+    base_url = llm_config.get('base_url', '')
+    api_key = llm_config.get('api_key', '') or os.getenv('DEEPSEEK_API_KEY', '')
+    
+    print(f"\n📋 配置信息:")
+    print(f"   - 模型: {model_name}")
+    print(f"   - Base URL: {base_url}")
+    print(f"   - API Key: {api_key[:20]}..." if len(api_key) > 20 else f"   - API Key: {api_key}")
+    print(f"   - Temperature: {llm_config.get('temperature', 0)}")
+    print(f"   - Max Tokens: {llm_config.get('max_tokens', 0)}")
 
     # 方式 1: 使用 TaskConfig 对象
     task_cfg = TaskConfig(
-        # 模型配置
-        model='Qwen/QwQ-32B',  # SiliconFlow 模型名称
+        # 模型配置（从配置文件读取）
+        model=model_name,  # 使用配置文件中的模型
         eval_type='openai_api',  # 使用 OpenAI 兼容的 API
 
-        # API 配置
-        api_url='https://api.siliconflow.cn/v1',  # SiliconFlow API 基础 URL
-        api_key=os.getenv('SILICONFLOW_API_KEY', ''),  # 从环境变量获取 API Key，避免暴露在代码中
+        # API 配置（从配置文件读取）
+        api_url=base_url,  # 从配置文件读取 base_url
+        api_key=api_key,  # 从配置文件读取 api_key，如果为空则从环境变量获取
 
         # 数据集配置
         datasets=['eq_bench'],
@@ -59,22 +136,19 @@ def eval_eq_bench_with_api():
         },
 
         # 评测配置
-        limit=2,  # 只评测前10个样本（用于快速测试）
+        #limit=2,  # 只评测前2个样本（用于快速测试）
         eval_batch_size=5,  # 批量大小
 
-        # 生成配置（针对 EQ-Bench 优化）
+        # 生成配置（从配置文件读取，针对 EQ-Bench 优化）
         generation_config={
-            'max_tokens': 256,  # EQ-Bench 每个问题需要约 60 tokens
-            'temperature': 0.01,  # ⚠️ EQ-Bench 必须使用低温度（0.01）保证一致性
-            'top_p': 0.7,  # SiliconFlow 推荐值
-            'top_k': 50,  # SiliconFlow 推荐值
-            'frequency_penalty': 0.5,
-            'min_p': 0.05,  # SiliconFlow 支持的参数
-            # 'enable_thinking': False,  # QwQ 模型特有参数（EvalScope 可能不支持）
+            'max_tokens': llm_config.get('max_tokens', 0) or 256,  # 从配置文件读取，默认 256
+            'temperature': llm_config.get('temperature', 0.01),  # ⚠️ EQ-Bench 必须使用低温度
+            'timeout': 120,  # 设置超时时间（秒），避免请求卡住
         },
 
         # 其他配置
-        debug=True,  # 开启调试模式
+        debug=False,  # 开启调试模式，可以看到详细的进度日志
+        timeout=120,  # API 请求超时时间（秒）
         work_dir='outputs/eq_bench_api',  # 结果保存目录
     )
 
@@ -89,21 +163,27 @@ def eval_eq_bench_with_api():
 
 
 def eval_eq_bench_with_dict():
-    """使用字典配置评测 EQ-Bench（更灵活的方式）"""
+    """使用字典配置评测 EQ-Bench（从配置文件读取）"""
 
     print("\n" + "=" * 60)
-    print("使用字典配置评测 EQ-Bench")
+    print("使用字典配置评测 EQ-Bench（从配置文件读取）")
     print("=" * 60)
+
+    # 从配置文件加载配置
+    llm_config = load_llm_config()
+    model_name = llm_config.get('models', ['openai/gpt-4o-mini'])[0]
+    base_url = llm_config.get('base_url', '')
+    api_key = llm_config.get('api_key', '') or os.getenv('DEEPSEEK_API_KEY', '')
 
     # 方式 2: 使用字典配置
     task_cfg = {
-        # 模型配置
-        'model': 'Qwen/QwQ-32B',  # SiliconFlow 模型名称
+        # 模型配置（从配置文件读取）
+        'model': model_name,
         'eval_type': 'openai_api',
 
-        # API 配置
-        'api_url': 'https://api.siliconflow.cn/v1',  # SiliconFlow API URL
-        'api_key': os.getenv('SILICONFLOW_API_KEY', ''),  # 从环境变量获取 API Key
+        # API 配置（从配置文件读取）
+        'api_url': base_url,
+        'api_key': api_key,
 
         # 数据集配置
         'datasets': ['eq_bench'],
@@ -119,14 +199,10 @@ def eval_eq_bench_with_dict():
         'limit': 10,  # 只评测前10个样本
         'eval_batch_size': 5,
 
-        # 生成配置（针对 EQ-Bench 优化）
+        # 生成配置（从配置文件读取）
         'generation_config': {
-            'max_tokens': 256,
-            'temperature': 0.01,  # ⚠️ EQ-Bench 必须使用低温度
-            'top_p': 0.7,
-            'top_k': 50,
-            'frequency_penalty': 0.5,
-            'min_p': 0.05,
+            'max_tokens': llm_config.get('max_tokens', 0) or 256,
+            'temperature': llm_config.get('temperature', 0.01),  # ⚠️ EQ-Bench 必须使用低温度
         },
 
         # 其他配置
@@ -145,12 +221,12 @@ def eval_eq_bench_with_dict():
 
 
 def eval_eq_bench_full():
-    """完整评测 EQ-Bench（所有 171 个问题）"""
+    """完整评测 EQ-Bench（所有问题，从配置文件读取配置）"""
 
     print("\n" + "=" * 60)
     print("完整评测 EQ-Bench（所有问题）")
     print("=" * 60)
-    print("\n⚠️  警告：这将评测全部 171 个问题，可能需要较长时间和一定的 API 费用。")
+    print("\n⚠️  警告：这将评测全部样本，可能需要较长时间和一定的 API 费用。")
 
     # 询问用户确认
     import sys
@@ -159,14 +235,20 @@ def eval_eq_bench_full():
         print("已取消。")
         sys.exit(0)
 
+    # 从配置文件加载配置
+    llm_config = load_llm_config()
+    model_name = llm_config.get('models', ['openai/gpt-4o-mini'])[0]
+    base_url = llm_config.get('base_url', '')
+    api_key = llm_config.get('api_key', '') or os.getenv('DEEPSEEK_API_KEY', '')
+
     task_cfg = TaskConfig(
-        # 模型配置
-        model='Qwen/QwQ-32B',  # SiliconFlow 模型
+        # 模型配置（从配置文件读取）
+        model=model_name,
         eval_type='openai_api',
 
-        # API 配置
-        api_url='https://api.siliconflow.cn/v1',  # SiliconFlow API URL
-        api_key=os.getenv('SILICONFLOW_API_KEY', ''),  # 从环境变量获取 API Key
+        # API 配置（从配置文件读取）
+        api_url=base_url,
+        api_key=api_key,
 
         # 数据集配置
         datasets=['eq_bench'],
@@ -180,14 +262,10 @@ def eval_eq_bench_full():
         limit=None,  # 评测所有样本
         eval_batch_size=10,  # 提高批量大小以加快速度
 
-        # 生成配置（针对 EQ-Bench 优化）
+        # 生成配置（从配置文件读取）
         generation_config={
-            'max_tokens': 256,
-            'temperature': 0.01,  # ⚠️ EQ-Bench 必须使用低温度
-            'top_p': 0.7,
-            'top_k': 50,
-            'frequency_penalty': 0.5,
-            'min_p': 0.05,
+            'max_tokens': llm_config.get('max_tokens', 0) or 256,
+            'temperature': llm_config.get('temperature', 0.01),  # ⚠️ EQ-Bench 必须使用低温度
         },
 
         # 其他配置
