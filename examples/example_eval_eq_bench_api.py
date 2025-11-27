@@ -16,25 +16,36 @@
        export LLM_MODEL='openai/gpt-4o-mini'
        export LLM_TEMPERATURE='0'
        export LLM_MAX_TOKENS='60'  # EQ-Bench 官方建议: REVISE=False 时使用 60
-    
+
     2. 配置文件（可选）：
        examples/api_test/llm_config.yaml
-    
+
 使用方法：
     # 方式 1: 使用环境变量（推荐）
     export LLM_API_KEY='your-api-key'
     python examples/example_eval_eq_bench_api.py
-    
+
     # 方式 2: 使用配置文件
     # 确保 examples/api_test/llm_config.yaml 存在
     python examples/example_eval_eq_bench_api.py
-    
+
+    # 方式 3: 使用阿里云 DashScope API
+    export DASHSCOPE_API_KEY='your-dashscope-api-key'
+    export DASHSCOPE_MODEL='qwen2.5-72b-instruct'
+    # 修改主函数调用 eval_eq_bench_with_dashscope()
+
 配置说明：
     - 优先从环境变量读取配置
     - 如果环境变量未设置，会尝试从配置文件读取
     - API Key 必须设置（环境变量或配置文件）
     - 默认模型: openai/gpt-4o-mini
     - 默认 Base URL: https://proxy.infix-ai.xyz/v1
+
+阿里云 DashScope API 配置：
+    - API Key 获取: https://dashscope.console.aliyun.com/apiKey
+    - 支持模型: qwen2.5-72b-instruct, qwen2.5-32b-instruct, qwen-plus, qwen-turbo 等
+    - Base URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+    - 文档: https://help.aliyun.com/zh/dashscope/
 """
 
 import os
@@ -291,6 +302,90 @@ def eval_eq_bench_full():
     return result
 
 
+def eval_eq_bench_with_dashscope():
+    """使用阿里云 DashScope API（百炼平台）评测 EQ-Bench
+
+    环境变量配置：
+        export DASHSCOPE_API_KEY='your-dashscope-api-key'
+        export DASHSCOPE_MODEL='qwen2.5-72b-instruct'  # 可选，默认使用 qwen2.5-72b-instruct
+
+    支持的模型：
+        - qwen2.5-72b-instruct
+        - qwen2.5-32b-instruct
+        - qwen-plus
+        - qwen-turbo
+        等其他百炼平台支持的模型
+
+    参考文档：
+        https://help.aliyun.com/zh/dashscope/
+    """
+
+    print("=" * 60)
+    print("使用阿里云 DashScope API 评测 EQ-Bench")
+    print("=" * 60)
+
+    # 从环境变量获取配置
+    api_key = os.getenv('DASHSCOPE_API_KEY', '')
+    model_name = os.getenv('DASHSCOPE_MODEL', 'qwen2.5-72b-instruct')
+    base_url = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+
+    if not api_key:
+        raise ValueError(
+            "DASHSCOPE_API_KEY 未设置！请设置环境变量：\n"
+            "export DASHSCOPE_API_KEY='your-dashscope-api-key'\n\n"
+            "获取 API Key：https://dashscope.console.aliyun.com/apiKey"
+        )
+
+    print(f"\n📋 配置信息:")
+    print(f"   - 模型: {model_name}")
+    print(f"   - Base URL: {base_url}")
+    print(f"   - API Key: {api_key[:20]}...{api_key[-4:]}" if len(api_key) > 24 else f"   - API Key: {api_key}")
+
+    # 配置任务
+    task_cfg = TaskConfig(
+        # 模型配置
+        model=model_name,
+        eval_type='openai_api',  # DashScope 兼容 OpenAI API 格式
+
+        # API 配置
+        api_url=base_url,
+        api_key=api_key,
+
+        # 数据集配置
+        datasets=['eq_bench'],
+        dataset_args={
+            'eq_bench': {
+                'dataset_id': str(DATASET_PATH),
+            }
+        },
+
+        # 评测配置
+        limit=10,  # 只评测前10个样本（用于快速测试）
+        eval_batch_size=5,
+
+        # 生成配置（针对 EQ-Bench 优化）
+        generation_config={
+            'max_tokens': 60,  # EQ-Bench 官方建议: REVISE=False 时使用 60
+            'temperature': 0.01,  # ⚠️ EQ-Bench 必须使用低温度
+            'timeout': 120,
+        },
+
+        # 其他配置
+        debug=True,
+        timeout=120,
+        work_dir='outputs/eq_bench_dashscope',
+    )
+
+    # 运行评测
+    print("\n开始评测...")
+    result = run_task(task_cfg=task_cfg)
+
+    print("\n评测完成！")
+    print(f"结果保存在: {task_cfg.work_dir}")
+
+    return result
+
+
 if __name__ == '__main__':
     # 选择要运行的评测方式
 
@@ -305,3 +400,7 @@ if __name__ == '__main__':
     # 方式 3: 完整评测（所有问题）
     # print("\n方式 3: 完整评测")
     # eval_eq_bench_full()
+
+    # 方式 4: 使用阿里云 DashScope API
+    # print("\n方式 4: 使用阿里云 DashScope API")
+    # eval_eq_bench_with_dashscope()
