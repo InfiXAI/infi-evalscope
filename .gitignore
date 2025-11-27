@@ -26,7 +26,6 @@ wheels/
 /package
 /temp
 MANIFEST
-
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -157,4 +156,7 @@ swift.test*
 evalscope/backend/rag_eval/ragas/prompts/chinese
 logs
 .gradio
+CLAUDE.md
+reference/
+examples/api_test
 *.h5
