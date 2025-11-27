@@ -157,6 +157,5 @@ evalscope/backend/rag_eval/ragas/prompts/chinese
 logs
 .gradio
 CLAUDE.md
-reference/
 examples/api_test
 *.h5
