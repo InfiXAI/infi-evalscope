@@ -9,7 +9,7 @@ from typing import Callable, Dict, List, Optional, Union
 from evalscope.api.dataset.utils import record_to_sample_fn
 from evalscope.constants import DEFAULT_EVALSCOPE_CACHE_DIR, HubType
 from evalscope.utils import get_logger
-from evalscope.utils.io_utils import csv_to_list, gen_hash, jsonl_to_list, safe_filename, tsv_to_list
+from evalscope.utils.io_utils import csv_to_list, gen_hash, jsonl_to_list, json_to_dict, safe_filename, tsv_to_list
 from .dataset import Dataset, FieldSpec, MemoryDataset, Sample
 from .utils import data_to_samples, shuffle_choices_if_requested
 
@@ -172,9 +172,60 @@ class RemoteDataLoader(DataLoader):
         return memory_dataset
 
 
+def parquet_to_list(parquet_file):
+    """
+    Read parquet file to list.
+    
+    Args:
+        parquet_file: parquet file path.
+        
+    Returns:
+        list: list of records. Each record is a dict.
+    """
+    try:
+        import pyarrow.parquet as pq
+        table = pq.read_table(parquet_file)
+        df = table.to_pandas()
+        # Convert DataFrame to list of dicts
+        return df.to_dict('records')
+    except ImportError:
+        logger.error('pyarrow is required to read parquet files. Please install it: pip install pyarrow')
+        raise
+    except Exception as e:
+        logger.error(f'Error reading parquet file {parquet_file}: {e}')
+        raise
+
+
+def json_to_list(json_file):
+    """
+    Read JSON file to list. Handles both JSON arrays and JSONL-like files.
+    
+    Args:
+        json_file: JSON file path.
+        
+    Returns:
+        list: list of records.
+    """
+    try:
+        data = json_to_dict(json_file)
+        # If it's a list, return it directly
+        if isinstance(data, list):
+            return data
+        # If it's a dict, wrap it in a list
+        elif isinstance(data, dict):
+            return [data]
+        else:
+            logger.warning(f'Unexpected JSON structure in {json_file}, returning empty list')
+            return []
+    except Exception as e:
+        # Try as JSONL if JSON parsing fails
+        logger.info(f'Failed to parse as JSON, trying as JSONL: {e}')
+        return jsonl_to_list(json_file)
+
+
 class LocalDataLoader(DataLoader):
     """
-    Data loader for local datasets. Reads from JSONL or CSV files.
+    Data loader for local datasets. Reads from JSONL, CSV, TSV, JSON, or Parquet files.
     """
 
     def load(self):
@@ -183,9 +234,11 @@ class LocalDataLoader(DataLoader):
         data_to_sample = record_to_sample_fn(self.sample_fields)
         dataset = []
 
-        # Check for JSONL or CSV files in the specified path
+        # Check for various file formats in the specified path
         for ext, loader in [
+            ('.parquet', parquet_to_list),
             ('.jsonl', jsonl_to_list),
+            ('.json', json_to_list),
             ('.csv', csv_to_list),
             ('.tsv', tsv_to_list),
         ]:
@@ -193,15 +246,22 @@ class LocalDataLoader(DataLoader):
             if os.path.isfile(path) and path.endswith(ext):
                 file_paths = [path]
             else:
+                # Try different path patterns
                 file_paths = [
                     os.path.join(path, f'{self.subset}_{self.split}{ext}'),
-                    os.path.join(path, f'{self.subset}{ext}')
+                    os.path.join(path, f'{self.subset}{ext}'),
+                    os.path.join(path, f'{self.split}{ext}'),
+                    # For parquet files, also try the pattern used by datasets library
+                    os.path.join(path, f'{self.split}-00000-of-00001{ext}') if ext == '.parquet' else None,
                 ]
+                file_paths = [p for p in file_paths if p is not None]
             # If the file exists, load it
             for file_path in file_paths:
                 if os.path.exists(file_path):
                     dataset = loader(file_path)
                     break  # Stop checking other extensions once a file is found
+            if dataset:  # If we found data, stop checking other extensions
+                break
 
         # shuffle if requested
         if self.shuffle:

@@ -1,7 +1,11 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+import os
+import csv
+from typing import Any, Dict
+
 from evalscope.api.benchmark import BenchmarkMeta, MultiChoiceAdapter
-from evalscope.api.dataset import Sample
+from evalscope.api.dataset import Sample, DatasetDict, DictDataLoader
 from evalscope.api.registry import register_benchmark
 from evalscope.constants import Tags
 from evalscope.utils.logger import get_logger
@@ -106,6 +110,100 @@ class CMMLUAdapter(MultiChoiceAdapter):
         self.reformat_subset = True
         self.category_map = {k: v[-1] for k, v in SUBJECT_MAPPING.items()}
 
+    def load(self):
+        """
+        Load C-MMLU dataset from local CSV files or remote source.
+        For local loading, expects CSV files in structure:
+        {dataset_id}/test/{subset}.csv
+        """
+        dataset_name_or_path = self.dataset_id
+        
+        # Check if this is a local path
+        if os.path.exists(dataset_name_or_path) and os.path.isdir(dataset_name_or_path):
+            # Local loading from CSV files
+            return self._load_from_local_csv(dataset_name_or_path)
+        else:
+            # Remote loading (original behavior)
+            return super().load()
+
+    def _load_from_local_csv(self, dataset_path: str):
+        """
+        Load C-MMLU dataset from local CSV files.
+        
+        Args:
+            dataset_path: Path to the dataset directory (should contain test/ and dev/ subdirectories)
+            
+        Returns:
+            Tuple of (test_dataset, fewshot_dataset)
+        """
+        from evalscope.api.dataset import DatasetDict
+        
+        test_dataset = DatasetDict({})
+        split_dir = os.path.join(dataset_path, self.eval_split)
+        
+        if not os.path.exists(split_dir):
+            raise FileNotFoundError(
+                f'Dataset split directory does not exist: {split_dir}. '
+                f'Expected structure: {dataset_path}/test/ or {dataset_path}/dev/'
+            )
+        
+        # Load all subsets from CSV files
+        for subset in self.subset_list:
+            csv_file = os.path.join(split_dir, f'{subset}.csv')
+            
+            if not os.path.exists(csv_file):
+                logger.warning(f'CSV file not found for subset {subset}: {csv_file}, skipping')
+                continue
+            
+            # Read CSV file
+            records = []
+            with open(csv_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    # CSV format: ,Question,A,B,C,D,Answer
+                    # Skip the first column (index)
+                    question = row.get('Question', '').strip()
+                    answer = row.get('Answer', '').strip()
+                    
+                    # Build choices list
+                    choices = []
+                    for choice_letter in ['A', 'B', 'C', 'D']:
+                        choice_text = row.get(choice_letter, '').strip()
+                        if choice_text:
+                            choices.append(f'({choice_letter}) {choice_text}')
+                    
+                    if not question or not answer or len(choices) == 0:
+                        logger.warning(f'Skipping invalid row in {csv_file}: {row}')
+                        continue
+                    
+                    # Get category from mapping
+                    category = self.category_map.get(subset, 'Other')
+                    
+                    record = {
+                        'question': question,
+                        'choices': choices,
+                        'answer': answer,  # e.g., "B"
+                        'category': category,
+                        'subject': subset,
+                    }
+                    records.append(record)
+            
+            if not records:
+                logger.warning(f'No valid records found in {csv_file}')
+                continue
+            
+            # Use DictDataLoader to load from records
+            dataset = DictDataLoader(
+                dict_list=records,
+                sample_fields=self.record_to_sample,
+                limit=self.limit,
+                shuffle=self.shuffle,
+            ).load()
+            
+            test_dataset[subset] = dataset
+        
+        return test_dataset, None
+
     def record_to_sample(self, record) -> Sample:
 
         # choices: ["(A) 农业生产工具","(B) 土地","(C) 劳动力","(D) 资金"]
@@ -116,7 +214,7 @@ class CMMLUAdapter(MultiChoiceAdapter):
         return Sample(
             input=record['question'],
             choices=choice_list,
-            target=record['answer'][1],  # answer is like "A"
+            target=record['answer'],  # answer is like "B" (already extracted from CSV)
             subset_key=record['category'],
-            metadata={'subject': record['category']},
+            metadata={'subject': record.get('subject', '')},
         )
