@@ -25,6 +25,7 @@ Homepage = "https://github.com/modelscope/evalscope"
 
 [project.scripts]
 evalscope = "evalscope.cli.cli:run_cmd"
+evalscope-viewer = "evalscope.viewer.cli:main"
 
 [build-system]
 requires = ["setuptools>=69", "wheel"]
@@ -49,6 +50,7 @@ perf        = {file = ["requirements/perf.txt"]}
 app         = {file = ["requirements/app.txt"]}
 aigc        = {file = ["requirements/aigc.txt"]}
 sandbox     = {file = ["requirements/sandbox.txt"]}
+viewer      = {file = ["requirements/viewer.txt"]}
 dev         = {file = ["requirements/dev.txt"]}
 docs        = {file = ["requirements/docs.txt"]}
 all = {file = [
