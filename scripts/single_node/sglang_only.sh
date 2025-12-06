@@ -27,6 +27,7 @@ MODEL="/lustre/projects/polyullm/models/Qwen3/Qwen3-4B"
 MODEL_NAME="Qwen3-4B"
 PORT=31000
 TP=2
+DP=4
 
 sglang_scripts="
 set -x
@@ -34,6 +35,7 @@ MODEL=${MODEL}
 PORT=${PORT}
 MODEL_NAME=${MODEL_NAME}
 TP=${TP}
+DP=${DP}
 
 python3 -m sglang.launch_server \
   --model ${MODEL} \
@@ -42,6 +44,7 @@ python3 -m sglang.launch_server \
   --port ${PORT} \
   --trust-remote-code \
   --tensor-parallel-size ${TP} \
+  --data-parallel-size ${DP}
   --warmups 3 \
   --max-running-requests 16 \
   --chunked-prefill-size 4096

@@ -5,6 +5,7 @@ Utility scripts for launching SGLang inference and EvalScope evaluation jobs on 
 ### Notes
 1. Set `EVAL_WORK_DIR` to a writable directory for evaluation outputs and logs.
 2. Double-check the prompts you pass to the evaluator—different models often require different `system_prompt` and `user_prompt` templates.
+3. For small models (≤7B), TP=8 is unnecessary—configure SGLang with data-parallel replicas (e.g., set `--data-parallel-size` to match your GPU count / TP) to keep all 8 GPUs busy and raise EvalScope's `--eval-batch-size` so the server stays “打满”.
 
 ### How to run
 
