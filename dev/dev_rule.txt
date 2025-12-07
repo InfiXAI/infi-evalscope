@@ -1,0 +1,35 @@
+采用四层分支模型：
+
+1. main：与上游 evalscope 官方仓库（https://github.com/modelscope/evalscope）保持同步，用于跟踪官方更新。
+2. internal-main：内部稳定版本分支，作为内部使用的稳定版本，不允许直接开发。
+3. dev：团队集成开发分支，所有功能合入从这里进行。
+4. 个人分支（如 ljj_dev、qzy_dev）：用于个人日常开发。
+
+开发流程：
+1. 每次开发前，从 dev 同步代码到个人分支：
+   git checkout dev && git pull origin dev  
+   git checkout lxx_dev && git merge dev  
+
+2. 在个人分支完成开发并 push：
+   git push origin lxx_dev
+
+3. 提 PR：个人分支 -> dev，代码评审通过后合并。
+
+4. 定期合并到内部稳定版本：dev -> internal-main（作为内部使用的稳定版本）
+
+5. 同步上游更新：当上游 main 分支有重大更新时，将 main 合并到 internal-main：
+   git checkout main && git pull upstream main
+   git checkout internal-main && git merge main
+
+远程仓库配置：
+- origin: 内部仓库（git@github.com:InfiXAI/infi-evalscope.git）
+- upstream: 上游官方仓库（已配置：git remote add upstream https://github.com/modelscope/evalscope.git）
+
+初始化分支结构：
+运行脚本初始化分支结构：
+  ./dev/setup_branches.sh
+
+或者手动创建 internal-main 分支：
+  git checkout main
+  git checkout -b internal-main
+  git push -u origin internal-main
